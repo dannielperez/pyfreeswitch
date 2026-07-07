@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pyfreeswitch"
+version = "0.1.0"
+description = "Typed Python library for FreeSWITCH — Event Socket Layer (ESL) event streaming, mod_callcenter status, and CDR parsing for the UniqueOS telephony pipeline."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "Daniel Perez" }]
+keywords = [
+    "freeswitch",
+    "esl",
+    "event-socket",
+    "voip",
+    "pbx",
+    "telephony",
+    "sip",
+    "cdr",
+    "call-center",
+    "mod_callcenter",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Telecommunications Industry",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Communications :: Telephony",
+    "Topic :: System :: Monitoring",
+    "Topic :: System :: Systems Administration",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/dannielperez/pyfreeswitch"
+Repository = "https://github.com/dannielperez/pyfreeswitch"
+Documentation = "https://github.com/dannielperez/pyfreeswitch#readme"
+Issues = "https://github.com/dannielperez/pyfreeswitch/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.4",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pyfreeswitch"]
