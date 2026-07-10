@@ -7,6 +7,7 @@ from pyfreeswitch.clients.esl_listener import ESL_IDLE
 from pyfreeswitch.clients.esl_listener import ESLEventListener
 from pyfreeswitch.clients.esl_parser import parse_event
 from pyfreeswitch.config import ESLConfig
+from pyfreeswitch.config import normalize_sip_profiles
 from pyfreeswitch.exceptions import ConfigError
 from pyfreeswitch.exceptions import ESLAuthError
 from pyfreeswitch.exceptions import ESLConnectionError
@@ -25,6 +26,8 @@ from pyfreeswitch.models.events import ChannelCreateEvent
 from pyfreeswitch.models.events import ChannelHangupEvent
 from pyfreeswitch.models.events import ESLEvent
 from pyfreeswitch.models.events import UnknownEvent
+from pyfreeswitch.models.registrations import SIPRegistration
+from pyfreeswitch.models.registrations import parse_sofia_reg
 
 __all__ = [
     "CDR_UNIQUE_COLUMNS",
@@ -48,8 +51,11 @@ __all__ = [
     "ESLTimeout",
     "FreeSwitchError",
     "NotSupportedError",
+    "SIPRegistration",
     "UnknownEvent",
     "__version__",
+    "normalize_sip_profiles",
     "parse_cdr_row",
     "parse_event",
+    "parse_sofia_reg",
 ]

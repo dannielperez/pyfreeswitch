@@ -21,15 +21,19 @@ explicit, auditable opt-in. The listener path (auth + ``event plain`` subscribe
 from __future__ import annotations
 
 import socket
+from contextlib import suppress
 from urllib.parse import unquote
 
 from pyfreeswitch.config import ESLConfig
+from pyfreeswitch.config import normalize_sip_profiles
 from pyfreeswitch.exceptions import ESLAuthError
 from pyfreeswitch.exceptions import ESLConnectionError
 from pyfreeswitch.exceptions import ESLError
 from pyfreeswitch.exceptions import ESLTimeout
 from pyfreeswitch.exceptions import NotSupportedError
 from pyfreeswitch.logging import get_logger
+from pyfreeswitch.models.registrations import SIPRegistration
+from pyfreeswitch.models.registrations import parse_sofia_reg
 
 log = get_logger("clients.esl")
 
@@ -103,7 +107,7 @@ class ESLClient:
         try:
             sock = socket.create_connection((host, port), timeout=self._config.timeout)
         except OSError as exc:
-            log.error("ESL connection failed: %s", exc)
+            log.exception("ESL connection failed")
             msg = f"Failed to connect to ESL at {host}:{port}: {exc}"
             raise ESLConnectionError(msg) from exc
 
@@ -176,17 +180,29 @@ class ESLClient:
         self._connected = False
         self._authenticated = False
         if self._sock is not None:
-            try:
+            with suppress(OSError):
                 self._sock.close()
-            except OSError:
-                pass
             self._sock = None
 
-    def __enter__(self) -> ESLClient:
+    def __enter__(self) -> ESLClient:  # noqa: PYI034 - package supports Python 3.10
+        self.connect()
+        try:
+            self.authenticate()
+        except BaseException:
+            self.close()
+            raise
         return self
 
     def __exit__(self, *exc: object) -> None:
         self.close()
+
+    def list_registrations(self, profile: str) -> list[SIPRegistration]:
+        """Return typed SIP registrations for one validated sofia profile."""
+        if normalize_sip_profiles([profile]) != (profile,):
+            msg = f"invalid FreeSWITCH SIP profile name: {profile!r}"
+            raise NotSupportedError(msg)
+        text = self.api(f"sofia status profile {profile} reg")
+        return parse_sofia_reg(text)
 
     # ------------------------------------------------------------------
     # Event stream
@@ -305,14 +321,16 @@ class ESLClient:
         try:
             chunk = self._sock.recv(4096)
         except socket.timeout as exc:  # noqa: UP041 — socket.timeout for py<3.10 parity
-            raise ESLTimeout("ESL read timed out (no frame in the read window)") from exc
+            msg = "ESL read timed out (no frame in the read window)"
+            raise ESLTimeout(msg) from exc
         except OSError as exc:
             self.close()
             msg = f"ESL read failed: {exc}"
             raise ESLConnectionError(msg) from exc
         if not chunk:
             self.close()
-            raise ESLConnectionError("ESL connection closed by peer")
+            msg = "ESL connection closed by peer"
+            raise ESLConnectionError(msg)
         return chunk
 
 
