@@ -44,6 +44,24 @@ def test_client_context_owns_connect_auth_and_close(monkeypatch):
     assert calls == ["connect", "authenticate", "close"]
 
 
+def test_client_context_closes_when_authentication_fails(monkeypatch):
+    client = ESLClient(ESLConfig(host="core.example", password=_AUTH_VALUE))
+    calls = []
+    error = RuntimeError("auth " + "failed")
+
+    def fail_authentication():
+        raise error
+
+    monkeypatch.setattr(client, "connect", lambda: calls.append("connect"))
+    monkeypatch.setattr(client, "authenticate", fail_authentication)
+    monkeypatch.setattr(client, "close", lambda: calls.append("close"))
+
+    with pytest.raises(RuntimeError), client:
+        pass
+
+    assert calls == ["connect", "close"]
+
+
 def test_list_registrations_owns_command_and_parsing(monkeypatch):
     client = ESLClient(ESLConfig(host="core.example", password=_AUTH_VALUE))
     commands = []

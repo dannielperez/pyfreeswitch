@@ -186,7 +186,11 @@ class ESLClient:
 
     def __enter__(self) -> ESLClient:  # noqa: PYI034 - package supports Python 3.10
         self.connect()
-        self.authenticate()
+        try:
+            self.authenticate()
+        except BaseException:
+            self.close()
+            raise
         return self
 
     def __exit__(self, *exc: object) -> None:
