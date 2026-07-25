@@ -28,7 +28,10 @@ from pyfreeswitch.models.events import ChannelHangupEvent
 from pyfreeswitch.models.events import ESLEvent
 from pyfreeswitch.models.events import UnknownEvent
 from pyfreeswitch.models.registrations import SIPRegistration
+from pyfreeswitch.models.registrations import SofiaRegResult
+from pyfreeswitch.models.registrations import SofiaRegState
 from pyfreeswitch.models.registrations import parse_sofia_reg
+from pyfreeswitch.models.registrations import parse_sofia_reg_result
 
 __all__ = [
     "CDR_UNIQUE_COLUMNS",
@@ -54,10 +57,13 @@ __all__ = [
     "FreeSwitchError",
     "NotSupportedError",
     "SIPRegistration",
+    "SofiaRegResult",
+    "SofiaRegState",
     "UnknownEvent",
     "__version__",
     "normalize_sip_profiles",
     "parse_cdr_row",
     "parse_event",
     "parse_sofia_reg",
+    "parse_sofia_reg_result",
 ]
