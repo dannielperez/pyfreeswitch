@@ -12,6 +12,7 @@ from pyfreeswitch.exceptions import ConfigError
 from pyfreeswitch.exceptions import ESLAuthError
 from pyfreeswitch.exceptions import ESLConnectionError
 from pyfreeswitch.exceptions import ESLError
+from pyfreeswitch.exceptions import ESLProtocolError
 from pyfreeswitch.exceptions import ESLTimeout
 from pyfreeswitch.exceptions import FreeSwitchError
 from pyfreeswitch.exceptions import NotSupportedError
@@ -48,6 +49,7 @@ __all__ = [
     "ESLError",
     "ESLEvent",
     "ESLEventListener",
+    "ESLProtocolError",
     "ESLTimeout",
     "FreeSwitchError",
     "NotSupportedError",

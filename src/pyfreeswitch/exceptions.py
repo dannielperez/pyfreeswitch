@@ -32,6 +32,14 @@ class ESLTimeout(ESLError):
     """
 
 
+class ESLProtocolError(ESLConnectionError):
+    """Connection-fatal ESL framing violation.
+
+    The socket has already been closed when this is raised; the caller must
+    reconnect.
+    """
+
+
 class NotSupportedError(FreeSwitchError):
     """Operation is not supported / not allow-listed on this client.
 

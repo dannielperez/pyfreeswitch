@@ -167,9 +167,9 @@ class ESLEventListener:
     ) -> None:
         """Stream events to ``on_event`` forever, reconnecting with backoff.
 
-        Returns only after :meth:`close`. A dropped connection is caught and
-        retried with exponential backoff (reset on each clean connect) so the
-        loop degrades gracefully rather than crashing on a transient drop.
+        Returns only after :meth:`close`. A connection-fatal error is caught
+        and retried with exponential backoff (reset on each clean connect) so
+        the loop degrades gracefully rather than crashing on a transient drop.
         """
         backoff = base_backoff
         while not self._closed:
