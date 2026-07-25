@@ -167,3 +167,62 @@ def test_parse_sofia_reg_is_unchanged_for_existing_callers():
     assert [row.extension for row in parse_sofia_reg(_SOFIA_REG)] == ["101"]
     assert parse_sofia_reg(_SOFIA_REG_EMPTY) == []
     assert parse_sofia_reg("") == []
+
+
+# -- list_registrations_result: the client-level typed variant -----------------
+
+
+def test_list_registrations_result_reports_error_state(monkeypatch):
+    """An -ERR reply must reach the caller as non-authoritative, not as []."""
+    client = ESLClient(ESLConfig(host="core.example", password=_AUTH_VALUE))
+    monkeypatch.setattr(client, "api", lambda _command, **_kw: "-ERR Invalid Profile")
+
+    result = client.list_registrations_result("wg")
+
+    assert result.state is SofiaRegState.ERROR
+    assert result.is_authoritative is False
+    assert result.registrations == []
+
+
+def test_list_registrations_result_reports_authoritative_empty(monkeypatch):
+    client = ESLClient(ESLConfig(host="core.example", password=_AUTH_VALUE))
+    monkeypatch.setattr(client, "api", lambda _command, **_kw: _SOFIA_REG_EMPTY)
+
+    result = client.list_registrations_result("wg")
+
+    assert result.state is SofiaRegState.EMPTY
+    assert result.is_authoritative is True
+
+
+def test_list_registrations_result_uses_the_same_command(monkeypatch):
+    client = ESLClient(ESLConfig(host="core.example", password=_AUTH_VALUE))
+    commands = []
+
+    def fake_api(command, **_kwargs):
+        commands.append(command)
+        return _SOFIA_REG
+
+    monkeypatch.setattr(client, "api", fake_api)
+
+    result = client.list_registrations_result("wg")
+
+    assert commands == ["sofia status profile wg reg"]
+    assert [row.extension for row in result.registrations] == ["101"]
+
+
+def test_list_registrations_result_validates_the_profile():
+    client = ESLClient(ESLConfig(host="core.example", password=_AUTH_VALUE))
+
+    with pytest.raises(NotSupportedError):
+        client.list_registrations_result("wg; status")
+
+
+def test_list_registrations_still_returns_a_bare_list(monkeypatch):
+    """The existing API keeps its shape now that it delegates."""
+    client = ESLClient(ESLConfig(host="core.example", password=_AUTH_VALUE))
+    monkeypatch.setattr(client, "api", lambda _command, **_kw: _SOFIA_REG)
+
+    rows = client.list_registrations("wg")
+
+    assert isinstance(rows, list)
+    assert [row.extension for row in rows] == ["101"]

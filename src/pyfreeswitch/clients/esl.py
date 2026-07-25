@@ -37,7 +37,9 @@ from pyfreeswitch.exceptions import ESLTimeout
 from pyfreeswitch.exceptions import NotSupportedError
 from pyfreeswitch.logging import get_logger
 from pyfreeswitch.models.registrations import SIPRegistration
+from pyfreeswitch.models.registrations import SofiaRegResult
 from pyfreeswitch.models.registrations import parse_sofia_reg
+from pyfreeswitch.models.registrations import parse_sofia_reg_result
 
 log = get_logger("clients.esl")
 
@@ -228,12 +230,27 @@ class ESLClient:
         self.close()
 
     def list_registrations(self, profile: str) -> list[SIPRegistration]:
-        """Return typed SIP registrations for one validated sofia profile."""
+        """Return typed SIP registrations for one validated sofia profile.
+
+        The bare list cannot say *why* it is empty. Use
+        ``list_registrations_result`` when the caller needs to know whether an
+        empty result is authoritative.
+        """
+        return self.list_registrations_result(profile).registrations
+
+    def list_registrations_result(self, profile: str) -> SofiaRegResult:
+        """Return one profile's registrations plus whether they are complete.
+
+        A caller that acts destructively on an empty list -- marking endpoints
+        unregistered, say -- must gate on ``SofiaRegResult.is_authoritative``,
+        because an ``-ERR`` refusal and truncated output both parse to zero rows
+        and are indistinguishable from a genuinely empty profile.
+        """
         if not _is_valid_sip_profile(profile):
             msg = f"invalid FreeSWITCH SIP profile name: {profile!r}"
             raise NotSupportedError(msg)
         text = self.api(f"sofia status profile {profile} reg")
-        return parse_sofia_reg(text)
+        return parse_sofia_reg_result(text)
 
     def status(self) -> str:
         """Return the core's read-only status report."""
