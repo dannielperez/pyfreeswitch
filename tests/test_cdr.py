@@ -8,25 +8,57 @@ from pyfreeswitch.models.cdr import CDRParseError, parse_cdr_row
 
 # One answered intercom->queue leg in template column order (15 cols w/ recording).
 _ANSWERED = [
-    "1799", "Los Olmos", "99", "intercom",
-    "2026-07-06 14:00:00", "2026-07-06 14:00:03", "2026-07-06 14:02:10",
-    "130", "127", "NORMAL_CLEARING",
-    "aaaa-uuid", "bbbb-uuid", "1799", "99", "aaaa-uuid.wav",
+    "1799",
+    "Los Olmos",
+    "99",
+    "intercom",
+    "2026-07-06 14:00:00",
+    "2026-07-06 14:00:03",
+    "2026-07-06 14:02:10",
+    "130",
+    "127",
+    "NORMAL_CLEARING",
+    "aaaa-uuid",
+    "bbbb-uuid",
+    "1799",
+    "99",
+    "aaaa-uuid.wav",
 ]
 
 _UNANSWERED = [
-    "1801", "", "99", "intercom",
-    "2026-07-06 14:00:00", "", "2026-07-06 14:00:20",
-    "20", "0", "NO_ANSWER",
-    "cccc-uuid", "", "1801", "99", "",
+    "1801",
+    "",
+    "99",
+    "intercom",
+    "2026-07-06 14:00:00",
+    "",
+    "2026-07-06 14:00:20",
+    "20",
+    "0",
+    "NO_ANSWER",
+    "cccc-uuid",
+    "",
+    "1801",
+    "99",
+    "",
 ]
 
 # A legacy row written before the recording column existed (14 cols).
 _LEGACY_14 = [
-    "1500", "", "99", "intercom",
-    "2026-07-06 14:00:00", "2026-07-06 14:00:02", "2026-07-06 14:01:00",
-    "60", "58", "NORMAL_CLEARING",
-    "dddd-uuid", "", "1500", "99",
+    "1500",
+    "",
+    "99",
+    "intercom",
+    "2026-07-06 14:00:00",
+    "2026-07-06 14:00:02",
+    "2026-07-06 14:01:00",
+    "60",
+    "58",
+    "NORMAL_CLEARING",
+    "dddd-uuid",
+    "",
+    "1500",
+    "99",
 ]
 
 
