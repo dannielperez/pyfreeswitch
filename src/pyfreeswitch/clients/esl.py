@@ -38,7 +38,6 @@ from pyfreeswitch.exceptions import NotSupportedError
 from pyfreeswitch.logging import get_logger
 from pyfreeswitch.models.registrations import SIPRegistration
 from pyfreeswitch.models.registrations import SofiaRegResult
-from pyfreeswitch.models.registrations import parse_sofia_reg
 from pyfreeswitch.models.registrations import parse_sofia_reg_result
 
 log = get_logger("clients.esl")

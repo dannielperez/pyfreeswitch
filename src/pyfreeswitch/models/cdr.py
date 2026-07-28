@@ -19,8 +19,8 @@ parse. Only the first 14 columns are required.
 
 from __future__ import annotations
 
-from datetime import UTC
 from datetime import datetime
+from datetime import timezone
 
 from pydantic import BaseModel
 from pydantic import Field
@@ -92,7 +92,7 @@ def _parse_ts(value: str) -> datetime | None:
     if not value or value in {"0", "1970-01-01 00:00:00"}:
         return None
     try:
-        return datetime.strptime(value, _TS_FORMAT).replace(tzinfo=UTC)
+        return datetime.strptime(value, _TS_FORMAT).replace(tzinfo=timezone.utc)
     except ValueError:
         return None
 
