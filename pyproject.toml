@@ -59,3 +59,8 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pyfreeswitch"]
+
+[tool.ruff.lint]
+# Ruff 0.16 expanded its implicit defaults. Keep the lint contract that this
+# repository used when CI was authored, and opt into broader rules separately.
+select = ["E4", "E7", "E9", "F"]
