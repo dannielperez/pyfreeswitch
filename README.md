@@ -22,9 +22,37 @@ enforces for `pytvt`, `pyakuvox`, `pyfreepbx` — CLAUDE.md §4.)
 ESL can control the switch (`originate`, `uuid_kill`, `reloadxml`, `hupall` …).
 This client is **read-only by default**: `ESLClient.api()` only runs an
 allow-listed set of status verbs (`status`, `sofia`, `show`,
-`callcenter_config` …). Mutating commands require an explicit `allow_unsafe=True`
-opt-in. The listener path issues no commands beyond its event subscription. The
-event-socket password is passed in via `ESLConfig` and never logged.
+`callcenter_config … list|get` …). Raw mutating strings require an explicit
+`allow_unsafe=True` opt-in. The listener path issues no commands beyond its
+event subscription. The event-socket password is passed in via `ESLConfig` and
+never logged.
+
+## Typed mutating commands (opt-in)
+
+The operator-console capabilities UniqueOS needs are exposed as **typed
+writers** that validate every token, build the one exact command form from
+`mod_callcenter.c` / `mod_commands.c`, and return a `CommandReply` (`ok`,
+`detail`, `not_found`). They are gated by `ESLConfig(allow_mutations=True)` —
+a listener or a read-only probe cannot reach them, and `allow_mutations` never
+unlocks raw `api()` strings.
+
+| Capability | Method | Command |
+|---|---|---|
+| queue join / leave / pause | `set_callcenter_agent_status(agent, AgentStatus)` | `callcenter_config agent set status <agent> '<status>'` |
+| reconcile stuck agent | `set_callcenter_agent_state(agent, AgentState)` | `callcenter_config agent set state <agent> '<state>'` |
+| membership / reconcile (read) | `list_callcenter_agents_typed()`, `list_callcenter_tiers_typed()`, `get_callcenter_agent_status()` | `callcenter_config agent list [agent]`, `tier list`, `agent get status` |
+| hang up | `uuid_kill(uuid, cause=None)` | `uuid_kill <uuid> [cause]` |
+| blind transfer | `uuid_transfer(uuid, dest, leg=, dialplan=, context=)` | `uuid_transfer <uuid> [-bleg\|-both] <dest> [<dialplan>] [<context>]` |
+| warm transfer (start) | `uuid_attended_transfer(uuid, dialstring)` | `uuid_broadcast <uuid> att_xfer::<dialstring> aleg` |
+| recording | `uuid_record(uuid, "start"\|"stop", path)` | `uuid_record <uuid> start\|stop <path>` |
+
+mod_callcenter semantics differ from Asterisk queues: an operator does not
+"add" themselves to a queue — they flip `status` on a pre-provisioned agent
+that already has a tier for the queue (`Available` = join, `Logged Out` =
+leave, `On Break` = pause). Runtime status is re-applied from XML on
+`reloadxml`/restart, so consumers reconcile with `list_callcenter_agents_typed()`.
+`att_xfer` has no "complete" command: the transfer completes when the
+transferrer hangs up.
 
 ```python
 from pyfreeswitch import ESLConfig, ESLEventListener, ESL_IDLE
@@ -58,6 +86,8 @@ src/pyfreeswitch/
   clients/esl_parser.py  parse_event() — frame -> typed DTO (pure)
   models/events.py       ESLEvent DTOs
   models/cdr.py          CallRecord + parse_cdr_row()
+  models/callcenter.py   AgentStatus/AgentState/TierState, agent + tier list parsers
+  models/commands.py     CommandReply + parse_command_reply() (+OK / -ERR)
 ```
 
 Consumed by UniqueOS as an editable path dependency (`vendor/pyfreeswitch`);

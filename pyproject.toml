@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pyfreeswitch"
-version = "0.1.0"
+version = "0.2.0"
 description = "Typed Python library for FreeSWITCH — Event Socket Layer (ESL) event streaming, mod_callcenter status, and CDR parsing for the UniqueOS telephony pipeline."
 readme = "README.md"
 license = "Apache-2.0"

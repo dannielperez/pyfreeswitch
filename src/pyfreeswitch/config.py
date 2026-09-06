@@ -75,6 +75,14 @@ class ESLConfig(BaseSettings):
         default=DEFAULT_ESL_MAX_FRAME_BYTES,
         description="Maximum total ESL frame size (header plus declared body).",
     )
+    allow_mutations: bool = Field(
+        default=False,
+        description=(
+            "Permit the typed mutating commands (callcenter agent status/state, "
+            "uuid_kill, uuid_transfer, att_xfer, uuid_record). Off by default: a "
+            "listener or read-only probe must never be able to control the switch."
+        ),
+    )
 
     @field_validator("timeout", mode="before")
     @classmethod
