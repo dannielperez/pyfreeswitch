@@ -21,6 +21,7 @@ at all beyond the subscription.
 
 from __future__ import annotations
 
+import re
 import socket
 import time
 from contextlib import suppress
@@ -36,6 +37,14 @@ from pyfreeswitch.exceptions import ESLProtocolError
 from pyfreeswitch.exceptions import ESLTimeout
 from pyfreeswitch.exceptions import NotSupportedError
 from pyfreeswitch.logging import get_logger
+from pyfreeswitch.models.callcenter import AgentState
+from pyfreeswitch.models.callcenter import AgentStatus
+from pyfreeswitch.models.callcenter import CallCenterAgent
+from pyfreeswitch.models.callcenter import CallCenterTier
+from pyfreeswitch.models.callcenter import parse_agent_list
+from pyfreeswitch.models.callcenter import parse_tier_list
+from pyfreeswitch.models.commands import CommandReply
+from pyfreeswitch.models.commands import parse_command_reply
 from pyfreeswitch.models.registrations import SIPRegistration
 from pyfreeswitch.models.registrations import SofiaRegResult
 from pyfreeswitch.models.registrations import parse_sofia_reg_result
@@ -62,10 +71,36 @@ _SAFE_SHOW_SUBCOMMANDS: frozenset[str] = frozenset(
     },
 )
 _SAFE_CALLCENTER_LIST_TARGETS: frozenset[str] = frozenset({"agent", "queue", "tier"})
+_SAFE_CALLCENTER_AGENT_GET_KEYS: frozenset[str] = frozenset({"status", "state", "uuid"})
+
+# Identifiers that are interpolated into a space-separated ESL command line.
+# Rejecting whitespace, quotes and control characters at the boundary is what
+# makes the typed writers below injection-proof; the switch itself does no
+# quoting.
+_AGENT_NAME_RE = re.compile(r"^[A-Za-z0-9_.@+-]{1,128}$")
+_QUEUE_NAME_RE = _AGENT_NAME_RE
+_UUID_RE = re.compile(r"^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$")
+_DEST_EXTEN_RE = re.compile(r"^[A-Za-z0-9_*#+.-]{1,64}$")
+_DIALPLAN_RE = re.compile(r"^[A-Za-z0-9_.-]{1,32}$")
+_CONTEXT_RE = _DIALPLAN_RE
+_HANGUP_CAUSE_RE = re.compile(r"^[A-Z0-9_]{1,64}$")
+# ``originate``-style dial strings for att_xfer: ``user/1001``,
+# ``sofia/internal/1001@domain`` — a single token, no braces (channel variables
+# would let a caller smuggle arbitrary settings), no whitespace.
+_DIALSTRING_RE = re.compile(r"^[A-Za-z0-9_./@:+*#-]{1,256}$")
+_RECORD_PATH_RE = re.compile(r"^/[A-Za-z0-9_./-]{1,512}$")
 
 
 def _is_valid_sip_profile(profile: str) -> bool:
     return normalize_sip_profiles([profile]) == (profile,)
+
+
+def _is_agent_name(value: str) -> bool:
+    return bool(_AGENT_NAME_RE.fullmatch(value or ""))
+
+
+def _is_uuid(value: str) -> bool:
+    return bool(_UUID_RE.fullmatch(value or ""))
 
 
 def _is_read_only_api_command(command: str) -> bool:
@@ -81,11 +116,20 @@ def _is_read_only_api_command(command: str) -> bool:
             allowed = query in {"status", "xmlstatus"}
         case ["callcenter_config", target, "list"]:
             allowed = target in _SAFE_CALLCENTER_LIST_TARGETS
+        case ["callcenter_config", "agent", "list", agent]:
+            allowed = _is_agent_name(agent)
+        case ["callcenter_config", "agent", "get", key, agent]:
+            allowed = key in _SAFE_CALLCENTER_AGENT_GET_KEYS and _is_agent_name(agent)
         case ["sofia", "status", "profile", profile]:
             allowed = _is_valid_sip_profile(profile)
         case ["sofia", "status", "profile", profile, "reg"]:
             allowed = _is_valid_sip_profile(profile)
     return allowed
+
+
+def _require(condition: bool, message: str) -> None:  # noqa: FBT001 - guard helper
+    if not condition:
+        raise NotSupportedError(message)
 
 
 class ESLClient:
@@ -279,6 +323,197 @@ class ESLClient:
     def list_callcenter_tiers(self) -> str:
         """Return the read-only mod_callcenter tier listing."""
         return self.api("callcenter_config tier list")
+
+    # ------------------------------------------------------------------
+    # mod_callcenter — typed reads
+    # ------------------------------------------------------------------
+
+    def list_callcenter_agents_typed(
+        self,
+        agent: str | None = None,
+    ) -> list[CallCenterAgent]:
+        """Typed ``callcenter_config agent list [agent]``.
+
+        Raises :class:`ESLError` on an ``-ERR`` reply so an empty list always
+        means "no such agents", never "the switch refused".
+        """
+        if agent is None:
+            text = self.api("callcenter_config agent list")
+        else:
+            _require(_is_agent_name(agent), f"invalid callcenter agent name: {agent!r}")
+            text = self.api(f"callcenter_config agent list {agent}")
+        try:
+            return parse_agent_list(text)
+        except ValueError as exc:
+            msg = f"callcenter agent list refused: {exc}"
+            raise ESLError(msg) from exc
+
+    def list_callcenter_tiers_typed(self) -> list[CallCenterTier]:
+        """Typed ``callcenter_config tier list``."""
+        text = self.api("callcenter_config tier list")
+        try:
+            return parse_tier_list(text)
+        except ValueError as exc:
+            msg = f"callcenter tier list refused: {exc}"
+            raise ESLError(msg) from exc
+
+    def get_callcenter_agent_status(self, agent: str) -> AgentStatus:
+        """``callcenter_config agent get status <agent>`` → :class:`AgentStatus`.
+
+        The switch prints the bare status text (no ``+OK``) on success and an
+        ``-ERR`` line otherwise; the latter is raised as :class:`ESLError`.
+        """
+        _require(_is_agent_name(agent), f"invalid callcenter agent name: {agent!r}")
+        text = self.api(f"callcenter_config agent get status {agent}")
+        return AgentStatus.from_text(self._bare_value(text, what="agent status"))
+
+    def get_callcenter_agent_state(self, agent: str) -> AgentState:
+        """``callcenter_config agent get state <agent>`` → :class:`AgentState`."""
+        _require(_is_agent_name(agent), f"invalid callcenter agent name: {agent!r}")
+        text = self.api(f"callcenter_config agent get state {agent}")
+        return AgentState.from_text(self._bare_value(text, what="agent state"))
+
+    @staticmethod
+    def _bare_value(text: str, *, what: str) -> str:
+        stripped = (text or "").strip()
+        if stripped.lower().startswith(("-err", "-usage")):
+            msg = f"{what} refused: {stripped.splitlines()[0][:200]}"
+            raise ESLError(msg)
+        return stripped.splitlines()[0] if stripped else ""
+
+    # ------------------------------------------------------------------
+    # Typed mutating commands (require ESLConfig.allow_mutations=True)
+    # ------------------------------------------------------------------
+    #
+    # Each method validates every interpolated token, builds the one exact
+    # command form documented in mod_callcenter.c / mod_commands.c and passes
+    # ``allow_unsafe=True`` itself. Callers never hand this client a raw
+    # command string. Replies are typed; the caller reads ``CommandReply.ok``.
+
+    def _mutate(self, command: str) -> CommandReply:
+        _require(
+            self._config.allow_mutations,
+            "this ESL client is read-only (ESLConfig.allow_mutations is False); "
+            "construct it with allow_mutations=True to run typed mutating commands",
+        )
+        log.info("ESL mutation: %s", command.split(" ", 1)[0])
+        return parse_command_reply(self.api(command, allow_unsafe=True))
+
+    def set_callcenter_agent_status(
+        self,
+        agent: str,
+        status: AgentStatus,
+    ) -> CommandReply:
+        """``callcenter_config agent set status <agent> '<status>'``.
+
+        ``Available`` = join, ``Logged Out`` = leave, ``On Break`` = pause. The
+        agent and its tiers must already be provisioned; the switch answers
+        ``-ERR Agent not found!`` otherwise (``CommandReply.not_found``).
+        """
+        _require(_is_agent_name(agent), f"invalid callcenter agent name: {agent!r}")
+        _require(
+            isinstance(status, AgentStatus) and status is not AgentStatus.UNKNOWN,
+            f"invalid callcenter agent status: {status!r}",
+        )
+        return self._mutate(
+            f"callcenter_config agent set status {agent} '{status.value}'",
+        )
+
+    def set_callcenter_agent_state(
+        self,
+        agent: str,
+        state: AgentState,
+    ) -> CommandReply:
+        """``callcenter_config agent set state <agent> '<state>'``.
+
+        Normally the switch drives state itself; exposed for reconcile after a
+        stuck ``In a queue call`` (set back to ``Waiting``).
+        """
+        _require(_is_agent_name(agent), f"invalid callcenter agent name: {agent!r}")
+        _require(
+            isinstance(state, AgentState) and state is not AgentState.UNKNOWN,
+            f"invalid callcenter agent state: {state!r}",
+        )
+        return self._mutate(
+            f"callcenter_config agent set state {agent} '{state.value}'",
+        )
+
+    def uuid_kill(self, uuid: str, cause: str | None = None) -> CommandReply:
+        """``uuid_kill <uuid> [cause]`` — hang up one channel by UUID."""
+        _require(_is_uuid(uuid), f"invalid channel uuid: {uuid!r}")
+        if cause is None:
+            return self._mutate(f"uuid_kill {uuid}")
+        _require(
+            bool(_HANGUP_CAUSE_RE.fullmatch(cause)),
+            f"invalid hangup cause: {cause!r}",
+        )
+        return self._mutate(f"uuid_kill {uuid} {cause}")
+
+    def uuid_transfer(
+        self,
+        uuid: str,
+        destination: str,
+        *,
+        leg: str = "aleg",
+        dialplan: str = "XML",
+        context: str | None = None,
+    ) -> CommandReply:
+        """``uuid_transfer <uuid> [-bleg|-both] <dest-exten> [<dialplan>] [<context>]``.
+
+        Blind transfer. ``leg="bleg"`` transfers the *other* party of the bridge
+        (the usual "send my caller to X"); ``"both"`` redirects both legs.
+        """
+        _require(_is_uuid(uuid), f"invalid channel uuid: {uuid!r}")
+        # A leading "-" would be re-read by the switch as a leg flag.
+        _require(
+            bool(_DEST_EXTEN_RE.fullmatch(destination))
+            and not destination.startswith("-"),
+            f"invalid transfer destination: {destination!r}",
+        )
+        _require(leg in {"aleg", "bleg", "both"}, f"invalid transfer leg: {leg!r}")
+        _require(
+            bool(_DIALPLAN_RE.fullmatch(dialplan)), f"invalid dialplan: {dialplan!r}"
+        )
+        parts = ["uuid_transfer", uuid]
+        if leg != "aleg":
+            parts.append(f"-{leg}")
+        parts.extend([destination, dialplan])
+        if context is not None:
+            _require(
+                bool(_CONTEXT_RE.fullmatch(context)), f"invalid context: {context!r}"
+            )
+            parts.append(context)
+        return self._mutate(" ".join(parts))
+
+    def uuid_attended_transfer(self, uuid: str, dialstring: str) -> CommandReply:
+        """Start a warm transfer: ``uuid_broadcast <uuid> att_xfer::<dialstring> aleg``.
+
+        ``att_xfer`` is a dialplan application, not an api command: the
+        transferrer's leg (``aleg``) dials ``dialstring`` while the other party
+        is held; the transfer *completes* when the transferrer hangs up and is
+        *cancelled* when the consultation leg hangs up. There is no separate
+        "complete" command — consumers must model that (parity matrix LV row).
+        """
+        _require(_is_uuid(uuid), f"invalid channel uuid: {uuid!r}")
+        _require(
+            bool(_DIALSTRING_RE.fullmatch(dialstring)),
+            f"invalid att_xfer dial string: {dialstring!r}",
+        )
+        return self._mutate(f"uuid_broadcast {uuid} att_xfer::{dialstring} aleg")
+
+    def uuid_record(self, uuid: str, action: str, path: str) -> CommandReply:
+        """``uuid_record <uuid> start|stop <path>`` — session recording control.
+
+        ``path`` is a switch-local absolute file path; where it lands and how it
+        is archived is the core's configuration, not this client's concern.
+        """
+        _require(_is_uuid(uuid), f"invalid channel uuid: {uuid!r}")
+        _require(action in {"start", "stop"}, f"invalid uuid_record action: {action!r}")
+        _require(
+            bool(_RECORD_PATH_RE.fullmatch(path)) and ".." not in path,
+            f"invalid recording path: {path!r}",
+        )
+        return self._mutate(f"uuid_record {uuid} {action} {path}")
 
     # ------------------------------------------------------------------
     # Event stream
