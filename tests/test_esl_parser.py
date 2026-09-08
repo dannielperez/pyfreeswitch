@@ -32,6 +32,49 @@ def test_channel_create_maps_caller_fields() -> None:
     assert event.received_at == 123.0
 
 
+def test_channel_relationship_fields_are_promoted_without_inventing_identity() -> None:
+    frame = {
+        "Event-Name": "CHANNEL_CREATE",
+        "Unique-ID": "loop-b",
+        "Channel-Call-UUID": "loop-b",
+        "variable_uuid": "variable-loop-b",
+        "variable_call_uuid": "variable-call-b",
+        "variable_originating_leg_uuid": "root-a",
+        "variable_signal_bond": "peer-c",
+        "variable_other_loopback_leg_uuid": "loop-a",
+        "variable_loopback_leg": "B",
+        "variable_sip_call_id": "dialog@example.test",
+        "variable_origination_uuid": "originate-root",
+    }
+
+    event = parse_event(frame, received_at=1.0)
+
+    assert event.originating_leg_uuid == "root-a"
+    assert event.variable_uuid == "variable-loop-b"
+    assert event.variable_call_uuid == "variable-call-b"
+    assert event.signal_bond == "peer-c"
+    assert event.other_loopback_leg_uuid == "loop-a"
+    assert event.loopback_leg == "B"
+    assert event.sip_call_id == "dialog@example.test"
+    assert event.origination_uuid == "originate-root"
+
+
+def test_missing_channel_relationship_fields_stay_none() -> None:
+    event = parse_event(
+        {"Event-Name": "CHANNEL_CREATE", "Unique-ID": "standalone"},
+        received_at=1.0,
+    )
+
+    assert event.originating_leg_uuid is None
+    assert event.variable_uuid is None
+    assert event.variable_call_uuid is None
+    assert event.signal_bond is None
+    assert event.other_loopback_leg_uuid is None
+    assert event.loopback_leg is None
+    assert event.sip_call_id is None
+    assert event.origination_uuid is None
+
+
 def test_hangup_coerces_int_billsec_and_duration() -> None:
     frame = {
         "Event-Name": "CHANNEL_HANGUP_COMPLETE",

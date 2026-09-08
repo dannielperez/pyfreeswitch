@@ -7,8 +7,8 @@ all correlation state belongs to the consumer.
 
 Normalization rules (see :mod:`pyfreeswitch.models.events`):
 
-* ``Unique-ID``/``Channel-Call-UUID``/``Channel-Name`` are read when present and
-  left ``None`` otherwise — **never fabricated**.
+* Channel identity and relationship headers are read when present and left
+  ``None`` otherwise — **never fabricated**.
 * ``CUSTOM`` frames dispatch on ``Event-Subclass`` (e.g. ``callcenter::info``).
 * Frames whose event name is not modelled become :class:`UnknownEvent`,
   carrying the full ``raw`` frame (faithful passthrough, never dropped).
@@ -108,7 +108,18 @@ def parse_event(frame: dict[str, str], received_at: float) -> ESLEvent:
         "received_at": received_at,
         "unique_id": frame.get("Unique-ID") or None,
         "call_uuid": frame.get("Channel-Call-UUID") or None,
+        "variable_uuid": frame.get("variable_uuid") or None,
+        "variable_call_uuid": frame.get("variable_call_uuid") or None,
         "channel_name": frame.get("Channel-Name") or None,
+        "originating_leg_uuid": frame.get("variable_originating_leg_uuid")
+        or frame.get("Originating-Leg-UUID")
+        or None,
+        "signal_bond": frame.get("variable_signal_bond") or None,
+        "other_loopback_leg_uuid": frame.get("variable_other_loopback_leg_uuid")
+        or None,
+        "loopback_leg": frame.get("variable_loopback_leg") or None,
+        "sip_call_id": frame.get("variable_sip_call_id") or None,
+        "origination_uuid": frame.get("variable_origination_uuid") or None,
         "raw": frame,
     }
 

@@ -5,11 +5,18 @@ telephony pipeline consumes. Parsing/normalization lives in
 :mod:`pyfreeswitch.clients.esl_parser`; correlation *state* (call sessions,
 leg maps) belongs to the consuming application, never here.
 
-Correlation rules (FreeSWITCH channel model):
+Correlation fields (FreeSWITCH channel model):
 
-* ``call_uuid`` (``Channel-Call-UUID``) is the call/session correlation key —
-  stable across both legs of a bridged call.
+* ``call_uuid`` (``Channel-Call-UUID``) is FreeSWITCH's channel call UUID. In
+  common dialplans it equals ``unique_id`` and is **not** guaranteed to be
+  stable across bridged or loopback legs.
 * ``unique_id`` (``Unique-ID``) is per-channel (per-leg).
+* ``variable_uuid`` and ``variable_call_uuid`` preserve the corresponding
+  channel variables separately; they often repeat the leg identity, but the
+  SDK never assumes that they do.
+* ``originating_leg_uuid``, ``signal_bond`` and
+  ``other_loopback_leg_uuid`` are explicit relationships to another channel;
+  the consuming application decides whether those legs form one domain call.
 * Both are read from the frame when present and left ``None`` otherwise —
   **never fabricated**; the consumer resolves any gap.
 * ``hangup_cause`` is metadata only; call *disposition* is derived from the
@@ -35,7 +42,15 @@ class ESLEvent(BaseModel):
     received_at: float
     unique_id: str | None = None
     call_uuid: str | None = None
+    variable_uuid: str | None = None
+    variable_call_uuid: str | None = None
     channel_name: str | None = None
+    originating_leg_uuid: str | None = None
+    signal_bond: str | None = None
+    other_loopback_leg_uuid: str | None = None
+    loopback_leg: str | None = None
+    sip_call_id: str | None = None
+    origination_uuid: str | None = None
     raw: dict[str, str] = Field(default_factory=dict)
 
 
