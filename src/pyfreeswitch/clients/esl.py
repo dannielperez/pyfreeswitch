@@ -189,6 +189,10 @@ class ESLClient:
             raise ESLConnectionError(msg) from exc
 
         sock.settimeout(self._config.timeout)
+        # Kernel keepalives detect half-open peers independently of application
+        # traffic.  Read timeouts remain ordinary idle windows; they are not
+        # evidence that an authenticated event subscription is unhealthy.
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         self._sock = sock
         self._buffer = b""
         self._connected = True

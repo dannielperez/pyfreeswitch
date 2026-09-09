@@ -54,6 +54,7 @@ ESL_IDLE = _IdleTick()
 # The call-signalling events the UniqueOS pipeline subscribes to. CUSTOM classes
 # use the ``module::subclass`` form (grouped onto the CUSTOM line by the client).
 DEFAULT_EVENTS: tuple[str, ...] = (
+    "HEARTBEAT",
     "CHANNEL_CREATE",
     "CHANNEL_ANSWER",
     "CHANNEL_BRIDGE",

@@ -8,6 +8,7 @@ import socket
 import pytest
 from pyfreeswitch.clients.esl import ESLClient
 from pyfreeswitch.clients.esl_listener import ESLEventListener
+from pyfreeswitch.clients.esl_listener import DEFAULT_EVENTS
 from pyfreeswitch.config import MIN_ESL_MAX_BODY_BYTES
 from pyfreeswitch.config import MIN_ESL_MAX_FRAME_BYTES
 from pyfreeswitch.config import MIN_ESL_MAX_HEADER_BYTES
@@ -31,6 +32,7 @@ class FakeSocket:
         self._chunks = list(chunks)
         self.sent: list[bytes] = []
         self.timeouts: list[float] = []
+        self.socket_options: list[tuple[int, int, int]] = []
         self.recv_calls = 0
         self.closed = False
 
@@ -48,6 +50,9 @@ class FakeSocket:
 
     def settimeout(self, timeout: float) -> None:
         self.timeouts.append(timeout)
+
+    def setsockopt(self, level: int, option: int, value: int) -> None:
+        self.socket_options.append((level, option, value))
 
     def close(self) -> None:
         self.closed = True
@@ -78,6 +83,20 @@ def test_authenticate_accepts_ok_reply() -> None:
     assert client.authenticated is True
     # Password is sent, never stored in the reply path.
     assert b"auth secret\n\n" in b"".join(client._sock.sent)
+
+
+def test_default_subscription_includes_heartbeat() -> None:
+    assert "HEARTBEAT" in DEFAULT_EVENTS
+
+
+def test_connect_enables_tcp_keepalive(monkeypatch) -> None:
+    sock = FakeSocket([b"Content-Type: auth/request\n\n"])
+    monkeypatch.setattr(socket, "create_connection", lambda *_args, **_kwargs: sock)
+    client = ESLClient(ESLConfig(host="h", port=8021, password="secret"))
+
+    client.connect()
+
+    assert (socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1) in sock.socket_options
 
 
 def test_authenticate_rejects_bad_password() -> None:
