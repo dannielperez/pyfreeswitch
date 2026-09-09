@@ -70,15 +70,34 @@ _FIELD_MAP: dict[str, tuple[type[ESLEvent], dict[str, str]]] = {
             "cc_action": "CC-Action",
             "cc_queue": "CC-Queue",
             "cc_agent": "CC-Agent",
-            "cc_member_uuid": "CC-Member-Session-UUID",
+            "cc_member_uuid": "CC-Member-UUID",
+            "cc_member_session_uuid": "CC-Member-Session-UUID",
+            "cc_agent_uuid": "CC-Agent-UUID",
             "cc_cause": "CC-Cause",
+            "cc_agent_called_time": "CC-Agent-Called-Time",
+            "cc_agent_answered_time": "CC-Agent-Answered-Time",
+            "cc_agent_aborted_time": "CC-Agent-Aborted-Time",
+            "cc_member_joined_time": "CC-Member-Joined-Time",
+            "cc_member_leaving_time": "CC-Member-Leaving-Time",
+            "cc_bridge_terminated_time": "CC-Bridge-Terminated-Time",
         },
     ),
 }
 
 # Integer-typed DTO attributes: coerce "" / non-numeric to None so pydantic's
 # int | None fields accept a quiet/empty header.
-_INT_ATTRS: frozenset[str] = frozenset({"duration", "billsec"})
+_INT_ATTRS: frozenset[str] = frozenset(
+    {
+        "duration",
+        "billsec",
+        "cc_agent_called_time",
+        "cc_agent_answered_time",
+        "cc_agent_aborted_time",
+        "cc_member_joined_time",
+        "cc_member_leaving_time",
+        "cc_bridge_terminated_time",
+    },
+)
 
 
 def _dispatch_key(frame: dict[str, str]) -> str:

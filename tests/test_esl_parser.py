@@ -106,13 +106,23 @@ def test_custom_callcenter_dispatches_on_subclass() -> None:
         "CC-Action": "bridge-agent-start",
         "CC-Queue": "99@core",
         "CC-Agent": "agent-101",
+        "CC-Agent-UUID": "agent-leg-1",
+        "CC-Member-UUID": "member-stable-1",
         "CC-Member-Session-UUID": "member-1",
+        "CC-Agent-Called-Time": "1788955201",
+        "CC-Agent-Answered-Time": "1788955203",
+        "CC-Member-Joined-Time": "1788955200",
     }
     event = parse_event(frame, received_at=1.0)
     assert isinstance(event, CallCenterEvent)
     assert event.cc_action == "bridge-agent-start"
     assert event.cc_queue == "99@core"
-    assert event.cc_member_uuid == "member-1"
+    assert event.cc_member_uuid == "member-stable-1"
+    assert event.cc_member_session_uuid == "member-1"
+    assert event.cc_agent_uuid == "agent-leg-1"
+    assert event.cc_agent_called_time == 1788955201
+    assert event.cc_agent_answered_time == 1788955203
+    assert event.cc_member_joined_time == 1788955200
 
 
 def test_unmodelled_event_is_unknown_but_faithful() -> None:

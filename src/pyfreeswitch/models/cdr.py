@@ -10,7 +10,11 @@ Template (column order is the contract)::
 
     caller_id_number, caller_id_name, destination_number, context,
     start_stamp, answer_stamp, end_stamp, duration, billsec,
-    hangup_cause, uuid, bleg_uuid, sip_from_user, sip_to_user, recording
+    hangup_cause, uuid, bleg_uuid, sip_from_user, sip_to_user, recording,
+    callcenter_side, queue_name, agent_name, agent_uuid, member_uuid,
+    member_session_uuid, queue_joined_epoch, queue_answered_epoch,
+    queue_terminated_epoch, queue_canceled_epoch, queue_cause,
+    queue_cancel_reason
 
 The trailing ``recording`` column (the ``${recording_file}`` basename) is
 **optional** — legacy 14-column rows written before recording was enabled still
@@ -45,6 +49,18 @@ CDR_UNIQUE_COLUMNS: tuple[str, ...] = (
     "sip_from_user",
     "sip_to_user",
     "recording",
+    "callcenter_side",
+    "queue_name",
+    "agent_name",
+    "agent_uuid",
+    "member_uuid",
+    "member_session_uuid",
+    "queue_joined_epoch",
+    "queue_answered_epoch",
+    "queue_terminated_epoch",
+    "queue_canceled_epoch",
+    "queue_cause",
+    "queue_cancel_reason",
 )
 
 # The first N columns are mandatory; ``recording`` (the last) is optional so
@@ -79,6 +95,18 @@ class CallRecord(BaseModel):
     sip_from_user: str = ""
     sip_to_user: str = ""
     recording: str = ""
+    callcenter_side: str = ""
+    queue_name: str = ""
+    agent_name: str = ""
+    agent_uuid: str = ""
+    member_uuid: str = ""
+    member_session_uuid: str = ""
+    queue_joined_at: datetime | None = None
+    queue_answered_at: datetime | None = None
+    queue_terminated_at: datetime | None = None
+    queue_canceled_at: datetime | None = None
+    queue_cause: str = ""
+    queue_cancel_reason: str = ""
     raw: dict[str, str] = Field(default_factory=dict)
 
     @property
@@ -102,6 +130,17 @@ def _parse_int(value: str) -> int:
         return int((value or "0").strip() or 0)
     except ValueError:
         return 0
+
+
+def _parse_epoch(value: str) -> datetime | None:
+    """Parse a mod_callcenter epoch channel variable as UTC."""
+    epoch = _parse_int(value)
+    if epoch <= 0:
+        return None
+    try:
+        return datetime.fromtimestamp(epoch, tz=timezone.utc)
+    except (OSError, OverflowError, ValueError):
+        return None
 
 
 def parse_cdr_row(row: list[str]) -> CallRecord:
@@ -144,6 +183,18 @@ def parse_cdr_row(row: list[str]) -> CallRecord:
         sip_from_user=fields["sip_from_user"].strip(),
         sip_to_user=fields["sip_to_user"].strip(),
         recording=fields.get("recording", "").strip(),
+        callcenter_side=fields.get("callcenter_side", "").strip(),
+        queue_name=fields.get("queue_name", "").strip(),
+        agent_name=fields.get("agent_name", "").strip(),
+        agent_uuid=fields.get("agent_uuid", "").strip(),
+        member_uuid=fields.get("member_uuid", "").strip(),
+        member_session_uuid=fields.get("member_session_uuid", "").strip(),
+        queue_joined_at=_parse_epoch(fields.get("queue_joined_epoch", "")),
+        queue_answered_at=_parse_epoch(fields.get("queue_answered_epoch", "")),
+        queue_terminated_at=_parse_epoch(fields.get("queue_terminated_epoch", "")),
+        queue_canceled_at=_parse_epoch(fields.get("queue_canceled_epoch", "")),
+        queue_cause=fields.get("queue_cause", "").strip(),
+        queue_cancel_reason=fields.get("queue_cancel_reason", "").strip(),
         raw=fields,
     )
 

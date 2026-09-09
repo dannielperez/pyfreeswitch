@@ -61,6 +61,22 @@ _LEGACY_14 = [
     "99",
 ]
 
+_QUEUE_AGENT_LEG = [
+    *_ANSWERED,
+    "agent",
+    "queue99@default",
+    "101@default",
+    "agent-leg-uuid",
+    "member-uuid",
+    "member-session-uuid",
+    "1788955200",
+    "1788955203",
+    "1788955260",
+    "0",
+    "terminated",
+    "",
+]
+
 
 def test_parse_answered_leg() -> None:
     rec = parse_cdr_row(_ANSWERED)
@@ -89,6 +105,21 @@ def test_parse_unanswered_leg_has_no_answer_stamp() -> None:
     assert rec.answer_stamp is None
     assert rec.billsec == 0
     assert rec.answered is False
+
+
+def test_parse_enriched_callcenter_leg() -> None:
+    rec = parse_cdr_row(_QUEUE_AGENT_LEG)
+    assert rec.callcenter_side == "agent"
+    assert rec.queue_name == "queue99@default"
+    assert rec.agent_name == "101@default"
+    assert rec.agent_uuid == "agent-leg-uuid"
+    assert rec.member_uuid == "member-uuid"
+    assert rec.member_session_uuid == "member-session-uuid"
+    assert rec.queue_joined_at is not None
+    assert rec.queue_answered_at is not None
+    assert rec.queue_terminated_at is not None
+    assert rec.queue_canceled_at is None
+    assert rec.queue_cause == "terminated"
 
 
 def test_short_row_raises() -> None:
