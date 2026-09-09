@@ -122,7 +122,15 @@ class CallCenterEvent(ESLEvent):
     cc_queue: str | None = None
     cc_agent: str | None = None
     cc_member_uuid: str | None = None
+    cc_member_session_uuid: str | None = None
+    cc_agent_uuid: str | None = None
     cc_cause: str | None = None
+    cc_agent_called_time: int | None = None
+    cc_agent_answered_time: int | None = None
+    cc_agent_aborted_time: int | None = None
+    cc_member_joined_time: int | None = None
+    cc_member_leaving_time: int | None = None
+    cc_bridge_terminated_time: int | None = None
 
 
 __all__ = [
