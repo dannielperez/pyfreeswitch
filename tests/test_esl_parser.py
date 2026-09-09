@@ -125,6 +125,23 @@ def test_custom_callcenter_dispatches_on_subclass() -> None:
     assert event.cc_member_joined_time == 1788955200
 
 
+def test_callcenter_join_epoch_accepts_channel_variable_spelling() -> None:
+    frame = {
+        "Event-Name": "CUSTOM",
+        "Event-Subclass": "callcenter::info",
+        "CC-Action": "member-queue-start",
+        "CC-Queue": "99@core",
+        "CC-Member-UUID": "member-stable-1",
+        "CC-Member-Session-UUID": "member-1",
+        "variable_cc_queue_joined_epoch": "1788955200",
+    }
+
+    event = parse_event(frame, received_at=1788955200.875)
+
+    assert isinstance(event, CallCenterEvent)
+    assert event.cc_member_joined_time == 1788955200
+
+
 def test_unmodelled_event_is_unknown_but_faithful() -> None:
     frame = {"Event-Name": "RECV_RTCP_MESSAGE", "Unique-ID": "x"}
     event = parse_event(frame, received_at=1.0)

@@ -150,6 +150,13 @@ def parse_event(frame: dict[str, str], received_at: float) -> ESLEvent:
     extra: dict[str, object] = {}
     for attr, header in field_map.items():
         value = frame.get(header)
+        if attr == "cc_member_joined_time" and value is None:
+            # ``member-queue-start`` carries the durable semantic join epoch as
+            # a channel variable on current mod_callcenter builds, while later
+            # actions expose the equivalent ``CC-Member-Joined-Time`` header.
+            # Normalize both wire spellings onto the same typed attribute so
+            # live ESL and durable CDR reconciliation share an identity.
+            value = frame.get("variable_cc_queue_joined_epoch")
         extra[attr] = _coerce_int(value) if attr in _INT_ATTRS else value
     return dto_cls(**base, **extra)
 
