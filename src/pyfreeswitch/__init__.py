@@ -30,6 +30,10 @@ from pyfreeswitch.models.cdr import CallRecord
 from pyfreeswitch.models.cdr import CDRParseError
 from pyfreeswitch.models.cdr import parse_cdr_row
 from pyfreeswitch.models.commands import CommandReply
+from pyfreeswitch.models.channels import ChannelSnapshot
+from pyfreeswitch.models.channels import ChannelSnapshotState
+from pyfreeswitch.models.channels import LiveChannel
+from pyfreeswitch.models.channels import parse_channel_snapshot
 from pyfreeswitch.models.commands import parse_command_reply
 from pyfreeswitch.models.events import CallCenterEvent
 from pyfreeswitch.models.events import ChannelAnswerEvent
@@ -57,6 +61,10 @@ __all__ = [
     "CallCenterTier",
     "CallRecord",
     "CommandReply",
+    "ChannelSnapshot",
+    "ChannelSnapshotState",
+    "LiveChannel",
+    "parse_channel_snapshot",
     "ChannelAnswerEvent",
     "ChannelBridgeEvent",
     "ChannelCreateEvent",

@@ -393,7 +393,7 @@ def test_api_blocks_unsafe_verb() -> None:
         "callcenter_config queue load x",
         "callcenter_config agent set status x y",
         "show arbitrary",
-        "show channels as json",
+        "show channels as xml",
     ],
 )
 def test_api_rejects_mutating_subcommands(command: str) -> None:
