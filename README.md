@@ -19,6 +19,26 @@ enforces for `pytvt`, `pyakuvox`, `pyfreepbx` — CLAUDE.md §4.)
 
 ## Safe by default
 
+### Command replies and stream recovery
+
+The inbound client follows the event/reply separation used by
+[upstream libesl](https://github.com/signalwire/freeswitch/blob/master/libs/esl/src/esl.c).
+Events arriving during a command are retained in order for `read_event()`;
+buffering is capped at 64 events and the configured `max_frame_bytes` byte budget.
+Overflow closes the connection with `ESLProtocolError`. All reply reads share one
+command deadline, so event traffic cannot extend a blocked command indefinitely.
+Use one caller per client and separate connections for concurrent consumers.
+
+An empty read timeout is an idle tick. An incomplete-frame timeout is an
+`ESLConnectionError`, causing the listener to reconnect. Command timeouts close
+the connection and never replay the command; a mutation may already have run,
+so reconcile its result before deciding whether to retry.
+
+This is remote `mod_event_socket` control; it does not require the server-side
+`mod_python3` interpreter or Sangoma's native SWIG package.
+
+### Command gates
+
 ESL can control the switch (`originate`, `uuid_kill`, `reloadxml`, `hupall` …).
 This client is **read-only by default**: `ESLClient.api()` only runs an
 allow-listed set of status verbs (`status`, `sofia`, `show`,
