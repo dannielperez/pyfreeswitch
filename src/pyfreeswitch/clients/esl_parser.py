@@ -68,11 +68,6 @@ _FIELD_MAP: dict[str, tuple[type[ESLEvent], dict[str, str]]] = {
         CallCenterEvent,
         {
             "cc_action": "CC-Action",
-            "cc_queue": "CC-Queue",
-            "cc_agent": "CC-Agent",
-            "cc_member_uuid": "CC-Member-UUID",
-            "cc_member_session_uuid": "CC-Member-Session-UUID",
-            "cc_agent_uuid": "CC-Agent-UUID",
             "cc_cause": "CC-Cause",
             "cc_agent_called_time": "CC-Agent-Called-Time",
             "cc_agent_answered_time": "CC-Agent-Answered-Time",
@@ -139,6 +134,17 @@ def parse_event(frame: dict[str, str], received_at: float) -> ESLEvent:
         "loopback_leg": frame.get("variable_loopback_leg") or None,
         "sip_call_id": frame.get("variable_sip_call_id") or None,
         "origination_uuid": frame.get("variable_origination_uuid") or None,
+        "cc_queue": frame.get("CC-Queue") or frame.get("variable_cc_queue") or None,
+        "cc_agent": frame.get("CC-Agent") or frame.get("variable_cc_agent") or None,
+        "cc_member_uuid": frame.get("CC-Member-UUID")
+        or frame.get("variable_cc_member_uuid")
+        or None,
+        "cc_member_session_uuid": frame.get("CC-Member-Session-UUID")
+        or frame.get("variable_cc_member_session_uuid")
+        or None,
+        "cc_agent_uuid": frame.get("CC-Agent-UUID")
+        or frame.get("variable_cc_agent_uuid")
+        or None,
         "raw": frame,
     }
 

@@ -51,6 +51,14 @@ class ESLEvent(BaseModel):
     loopback_leg: str | None = None
     sip_call_id: str | None = None
     origination_uuid: str | None = None
+    # mod_callcenter copies these correlation variables onto the ordinary
+    # CHANNEL_* events for member and agent legs.  They are not limited to the
+    # CUSTOM/callcenter::info event family.
+    cc_queue: str | None = None
+    cc_agent: str | None = None
+    cc_member_uuid: str | None = None
+    cc_member_session_uuid: str | None = None
+    cc_agent_uuid: str | None = None
     raw: dict[str, str] = Field(default_factory=dict)
 
 
@@ -119,11 +127,6 @@ class CallCenterEvent(ESLEvent):
     """
 
     cc_action: str | None = None
-    cc_queue: str | None = None
-    cc_agent: str | None = None
-    cc_member_uuid: str | None = None
-    cc_member_session_uuid: str | None = None
-    cc_agent_uuid: str | None = None
     cc_cause: str | None = None
     cc_agent_called_time: int | None = None
     cc_agent_answered_time: int | None = None

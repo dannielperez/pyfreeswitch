@@ -45,6 +45,11 @@ def test_channel_relationship_fields_are_promoted_without_inventing_identity() -
         "variable_loopback_leg": "B",
         "variable_sip_call_id": "dialog@example.test",
         "variable_origination_uuid": "originate-root",
+        "variable_cc_queue": "99@core",
+        "variable_cc_agent": "agent-101@core",
+        "variable_cc_member_uuid": "member-stable-1",
+        "variable_cc_member_session_uuid": "member-session-1",
+        "variable_cc_agent_uuid": "agent-leg-1",
     }
 
     event = parse_event(frame, received_at=1.0)
@@ -57,6 +62,11 @@ def test_channel_relationship_fields_are_promoted_without_inventing_identity() -
     assert event.loopback_leg == "B"
     assert event.sip_call_id == "dialog@example.test"
     assert event.origination_uuid == "originate-root"
+    assert event.cc_queue == "99@core"
+    assert event.cc_agent == "agent-101@core"
+    assert event.cc_member_uuid == "member-stable-1"
+    assert event.cc_member_session_uuid == "member-session-1"
+    assert event.cc_agent_uuid == "agent-leg-1"
 
 
 def test_missing_channel_relationship_fields_stay_none() -> None:
@@ -73,6 +83,11 @@ def test_missing_channel_relationship_fields_stay_none() -> None:
     assert event.loopback_leg is None
     assert event.sip_call_id is None
     assert event.origination_uuid is None
+    assert event.cc_queue is None
+    assert event.cc_agent is None
+    assert event.cc_member_uuid is None
+    assert event.cc_member_session_uuid is None
+    assert event.cc_agent_uuid is None
 
 
 def test_hangup_coerces_int_billsec_and_duration() -> None:
