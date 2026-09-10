@@ -1,0 +1,13 @@
+HANDOFF: codex/esl-upstream-conformance · 2026-09-09
+- objective: Apply upstream ESL event/reply separation to the existing UniqueOS SDK.
+- state: implemented; reviewable local commit, draft PR prepared at closeout.
+- changed: `clients/esl.py` retains racing events with count/byte caps and one command deadline; closes timed-out commands and incomplete frames. `tests/test_esl_client.py` adds regression/reconnect coverage. README documents the public recovery contract.
+- validation: nine new cases fail before the fix; `PYTHONPATH=src /Users/dperez/git/UniqueOS/.venv/bin/python -m pytest -q` — 188 passed. Ruff check and format check — pass. Python runtime: 3.14. UniqueOS isolated DB-free SDK contracts — 46 passed; Django check — no issues.
+- risk: medium, transport error handling. Idle reads still preserve healthy subscriptions. Incomplete frames now raise ESLConnectionError and reconnect. Command timeout means unknown outcome, never automatic retry. Public command methods and mutation gates unchanged.
+- source: https://github.com/signalwire/freeswitch/blob/master/libs/esl/src/esl.c (`esl_send_recv_timed`); behavior independently implemented, no copied code or new runtime dependency.
+- review-fanout: stability-reviewer OK; sdk-boundary-reviewer OK; migration-safety-reviewer n/a (no schema/data changes).
+- BUGS: racing events misclassified as replies and incomplete-frame resynchronization fixed.
+- MISSING TESTS: live server/UAT recovery remains unverified; mocked transport suite passes.
+- MIGRATION/DATA RISK: no migration; overflow or disconnect can lose transient events, requiring existing durable CDR reconciliation.
+- NITS: none. Verdict: ship for code review; human owns merge and rollout.
+- next: land SDK first, then UniqueOS consumer pin on codex/freeswitch-esl-research; owner schedules UAT validation. No live calls, credentials, deployment or production configuration changes.

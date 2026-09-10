@@ -24,6 +24,7 @@ from __future__ import annotations
 import re
 import socket
 import time
+from collections import deque
 from contextlib import suppress
 from typing import NoReturn
 from urllib.parse import unquote
@@ -53,6 +54,7 @@ log = get_logger("clients.esl")
 
 _LF = "\n"
 _END = "\n\n"
+_MAX_PENDING_EVENTS = 64
 
 # Complete read-only command shapes. Multi-purpose verbs such as ``sofia`` and
 # ``callcenter_config`` are accepted only after their full token sequence is
@@ -159,6 +161,8 @@ class ESLClient:
         self._buffer: bytes = b""
         self._connected = False
         self._authenticated = False
+        self._pending_events: deque[tuple[dict[str, str], int]] = deque()
+        self._pending_event_bytes = 0
 
     # ------------------------------------------------------------------
     # Connection lifecycle
@@ -259,6 +263,9 @@ class ESLClient:
         """Close the socket. Idempotent; swallows teardown errors."""
         self._connected = False
         self._authenticated = False
+        self._buffer = b""
+        self._pending_events.clear()
+        self._pending_event_bytes = 0
         if self._sock is not None:
             with suppress(OSError):
                 self._sock.close()
@@ -535,7 +542,11 @@ class ESLClient:
             ESLConnectionError: The socket dropped.
             ESLProtocolError: The frame is malformed or exceeds a safety cap.
         """
-        outer = self._read_frame()
+        if self._pending_events:
+            outer, size = self._pending_events.popleft()
+            self._pending_event_bytes -= size
+        else:
+            outer = self._read_frame()
         ctype = outer.get("Content-Type")
         if ctype == "text/event-plain":
             body = outer.get("_body", "")
@@ -549,9 +560,42 @@ class ESLClient:
     # ------------------------------------------------------------------
 
     def _command(self, line: str) -> dict[str, str]:
-        """Send one command line and read the immediate reply frame."""
-        self._send(line + _END)
-        return self._read_frame()
+        """Wait for a reply, retaining racing events within finite limits.
+
+        Like upstream libesl's send/recv, command replies and event delivery
+        are separate. This synchronous client supports one caller at a time;
+        use separate connections for concurrent commands and event consumers.
+        A timeout leaves command completion unknown: close, never replay.
+        """
+        deadline = time.monotonic() + self._config.timeout
+        try:
+            self._send(line + _END)
+            while True:
+                if time.monotonic() >= deadline:
+                    raise ESLTimeout("ESL command reply deadline elapsed")
+                frame = self._read_frame(deadline=deadline)
+                ctype = frame.get("Content-Type")
+                if ctype in {"api/response", "command/reply"}:
+                    return frame
+                if ctype != "text/event-plain":
+                    self._raise_protocol_error(
+                        "unexpected ESL frame while awaiting command reply"
+                    )
+                size = sum(
+                    len(k.encode()) + len(v.encode()) + 4 for k, v in frame.items()
+                )
+                if (
+                    len(self._pending_events) >= _MAX_PENDING_EVENTS
+                    or self._pending_event_bytes + size > self._config.max_frame_bytes
+                ):
+                    self._raise_protocol_error(
+                        "ESL pending event buffer exceeds its limit"
+                    )
+                self._pending_events.append((frame, size))
+                self._pending_event_bytes += size
+        except ESLTimeout:
+            self.close()
+            raise
 
     def _send(self, data: str) -> None:
         if self._sock is None:
@@ -564,21 +608,24 @@ class ESLClient:
             msg = f"ESL send failed: {exc}"
             raise ESLConnectionError(msg) from exc
 
-    def _read_frame(self) -> dict[str, str]:
+    def _read_frame(self, *, deadline: float | None = None) -> dict[str, str]:
         """Read one header block + optional Content-Length body.
 
         The body is stored under the ``_body`` key. Header values are left as-is
         here (the outer envelope is ASCII); event-body values are URL-decoded in
         :meth:`_parse_event_body`.
         """
-        deadline = time.monotonic() + self._config.timeout
+        if deadline is None:
+            deadline = time.monotonic() + self._config.timeout
         sock = self._sock
+        header_consumed = False
         try:
             header_bytes = self._read_until(
                 b"\n\n",
                 deadline,
                 max_bytes=self._config.max_header_bytes,
             )
+            header_consumed = True
             header_size = len(header_bytes) + len(_END)
             if header_size > self._config.max_frame_bytes:
                 self._raise_protocol_error(
@@ -598,6 +645,15 @@ class ESLClient:
                         errors="replace",
                     )
             return headers
+        except ESLTimeout as exc:
+            if header_consumed or self._buffer:
+                # Header/body bytes cannot be interpreted as a new frame after
+                # an idle tick. Force the listener's existing reconnect path.
+                self.close()
+                raise ESLConnectionError(
+                    "ESL timed out receiving an incomplete frame"
+                ) from exc
+            raise
         finally:
             if sock is not None and self._sock is sock:
                 with suppress(OSError):

@@ -77,6 +77,99 @@ def _api_reply(body: str = "") -> bytes:
     ).encode()
 
 
+def _event_frame(name: str = "HEARTBEAT", payload: str = "") -> bytes:
+    body = f"Event-Name: {name}\n\n{payload}".encode()
+    return (
+        f"Content-Type: text/event-plain\nContent-Length: {len(body)}\n\n".encode()
+        + body
+    )
+
+
+def test_command_preserves_interleaved_events_in_order() -> None:
+    client = _client(
+        [
+            _event_frame("CHANNEL_CREATE")
+            + _event_frame("CHANNEL_ANSWER")
+            + _api_reply("UP")
+            + _event_frame("CHANNEL_HANGUP_COMPLETE"),
+        ]
+    )
+    assert client.status() == "UP"
+    assert [client.read_event()["Event-Name"] for _ in range(3)] == [
+        "CHANNEL_CREATE",
+        "CHANNEL_ANSWER",
+        "CHANNEL_HANGUP_COMPLETE",
+    ]
+
+
+def test_subscription_preserves_event_before_ack() -> None:
+    client = _client(
+        [_event_frame() + b"Content-Type: command/reply\nReply-Text: +OK\n\n"]
+    )
+    client.subscribe(["HEARTBEAT"])
+    assert client.read_event()["Event-Name"] == "HEARTBEAT"
+
+
+@pytest.mark.parametrize("prefix", [b"Content-T", b"Content-Length: 20\n\npartial"])
+def test_partial_frame_timeout_closes_connection(prefix: bytes) -> None:
+    client = _client([prefix, None])
+    with pytest.raises(ESLConnectionError, match="incomplete frame"):
+        client.read_event()
+    assert not client.connected
+    assert client._buffer == b""
+
+
+def test_command_timeout_closes_before_late_reply_can_be_reused() -> None:
+    client = _client([None, _api_reply("late")])
+    with pytest.raises(ESLTimeout):
+        client.status()
+    assert not client.connected
+    with pytest.raises(ESLConnectionError):
+        client.status()
+
+
+def test_interleaved_events_share_one_command_deadline(monkeypatch) -> None:
+    now = [0.0]
+    monkeypatch.setattr("pyfreeswitch.clients.esl.time.monotonic", lambda: now[0])
+    client = _client([_event_frame()] * 10, timeout=1)
+    sock = client._sock
+    original_recv = sock.recv
+
+    def recv(size):
+        now[0] += 0.4
+        return original_recv(size)
+
+    sock.recv = recv
+    with pytest.raises(ESLTimeout):
+        client.status()
+    assert sock.recv_calls <= 3
+    assert sock.closed
+
+
+def test_pending_event_count_is_bounded() -> None:
+    client = _client([_event_frame() * 65 + _api_reply("UP")])
+    with pytest.raises(ESLProtocolError, match="pending event"):
+        client.status()
+    assert not client.connected
+
+
+def test_pending_event_bytes_are_bounded() -> None:
+    client = _client(
+        [_event_frame(payload="x" * 900) * 3 + _api_reply("UP")],
+        max_frame_bytes=MIN_ESL_MAX_FRAME_BYTES,
+    )
+    with pytest.raises(ESLProtocolError, match="pending event"):
+        client.status()
+    assert not client.connected
+
+
+def test_disconnect_notice_during_command_is_not_success() -> None:
+    client = _client([b"Content-Type: text/disconnect-notice\n\n"])
+    with pytest.raises(ESLConnectionError):
+        client.status()
+    assert not client.connected
+
+
 def test_authenticate_accepts_ok_reply() -> None:
     client = _client([b"Content-Type: command/reply\nReply-Text: +OK accepted\n\n"])
     client.authenticate()
@@ -198,14 +291,23 @@ def test_protocol_error_is_connection_error() -> None:
     assert issubclass(ESLProtocolError, ESLError)
 
 
-def test_listener_reconnects_after_protocol_error(monkeypatch) -> None:
+@pytest.mark.parametrize(
+    "failure",
+    [
+        [b"Content-Length: not-a-number\n\n"],
+        [b"Content-Length: 20\n\npartial", None],
+    ],
+)
+def test_listener_reconnects_after_invalid_or_incomplete_frame(
+    monkeypatch, failure
+) -> None:
     config = ESLConfig(host="h", port=8021, password="secret")
     first_socket = FakeSocket(
         [
             b"Content-Type: auth/request\n\n",
             b"Content-Type: command/reply\nReply-Text: +OK accepted\n\n",
             b"Content-Type: command/reply\nReply-Text: +OK subscribed\n\n",
-            b"Content-Length: not-a-number\n\n",
+            *failure,
         ],
     )
     second_socket = FakeSocket(
@@ -265,11 +367,12 @@ def test_trickle_cannot_extend_total_frame_deadline(monkeypatch) -> None:
     client = _client([b"X"] * 10, timeout=1)
     sock = client._sock
 
-    with pytest.raises(ESLTimeout, match="frame deadline elapsed"):
+    with pytest.raises(ESLConnectionError, match="incomplete frame"):
         client.read_event()
 
     assert sock.recv_calls == 2  # noqa: PLR2004 - exact controlled-clock contract
-    assert client.connected is True
+    assert client.connected is False
+    assert sock.closed
 
 
 def test_api_blocks_unsafe_verb() -> None:
