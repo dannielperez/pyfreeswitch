@@ -19,6 +19,37 @@ enforces for `pytvt`, `pyakuvox`, `pyfreepbx` — CLAUDE.md §4.)
 
 ## Safe by default
 
+### Live channel snapshots
+
+`ESLClient.list_channels_result()` runs the exact read-only command
+`show channels as json` and returns a `ChannelSnapshot` with typed `LiveChannel`
+rows, response capture time and configured source endpoint. No extra module or
+runtime dependency is required.
+
+```python
+with ESLClient(config) as client:
+    snapshot = client.list_channels_result()
+    if snapshot.is_authoritative:
+        for channel in snapshot.channels:
+            consume_channel(channel.uuid, channel.direction, channel.state)
+    else:
+        report_unavailable(snapshot.state, snapshot.detail)
+```
+
+`COMPLETE` and `EMPTY` describe valid response shapes. `ERROR` (server refusal)
+and `MALFORMED` never expose partial rows as authoritative data. The parser
+rejects duplicate IDs/keys, invalid known fields and row-count mismatches;
+unknown extension fields are ignored. Parsing is capped at 10,000 rows and
+16 MiB, while the transport's configured frame/body limits still apply.
+
+Capture time is local response receipt; the snapshot is not atomic with the
+event stream. **Absence is not proof a call ended.** Reconcile with events and
+CDRs in the consuming application. Transport failures raise the existing ESL
+exceptions and do not masquerade as an empty snapshot.
+
+`parse_channel_snapshot(text)` is available for offline fixtures. Source/capture
+metadata is populated only by the client method, not fabricated by the parser.
+
 ### Command replies and stream recovery
 
 The inbound client follows the event/reply separation used by

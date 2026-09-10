@@ -26,6 +26,8 @@ import socket
 import time
 from collections import deque
 from contextlib import suppress
+from dataclasses import replace
+from datetime import datetime, timezone
 from typing import NoReturn
 from urllib.parse import unquote
 
@@ -45,6 +47,7 @@ from pyfreeswitch.models.callcenter import CallCenterTier
 from pyfreeswitch.models.callcenter import parse_agent_list
 from pyfreeswitch.models.callcenter import parse_tier_list
 from pyfreeswitch.models.commands import CommandReply
+from pyfreeswitch.models.channels import ChannelSnapshot, parse_channel_snapshot
 from pyfreeswitch.models.commands import parse_command_reply
 from pyfreeswitch.models.registrations import SIPRegistration
 from pyfreeswitch.models.registrations import SofiaRegResult
@@ -114,6 +117,8 @@ def _is_read_only_api_command(command: str) -> bool:
             allowed = bare in _SAFE_BARE_API_COMMANDS
         case ["show", subcommand]:
             allowed = subcommand in _SAFE_SHOW_SUBCOMMANDS
+        case ["show", "channels", "as", "json"]:
+            allowed = True
         case ["sofia", query]:
             allowed = query in {"status", "xmlstatus"}
         case ["callcenter_config", target, "list"]:
@@ -192,21 +197,24 @@ class ESLClient:
             msg = f"Failed to connect to ESL at {host}:{port}: {exc}"
             raise ESLConnectionError(msg) from exc
 
-        sock.settimeout(self._config.timeout)
-        # Kernel keepalives detect half-open peers independently of application
-        # traffic.  Read timeouts remain ordinary idle windows; they are not
-        # evidence that an authenticated event subscription is unhealthy.
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         self._sock = sock
         self._buffer = b""
         self._connected = True
         self._authenticated = False
-
-        greeting = self._read_frame()
-        if greeting.get("Content-Type") != "auth/request":
+        try:
+            sock.settimeout(self._config.timeout)
+            # Idle reads are normal after subscription; kernel keepalives can
+            # independently detect half-open peers.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+            greeting = self._read_frame()
+            if greeting.get("Content-Type") != "auth/request":
+                msg = f"unexpected ESL greeting: {greeting.get('Content-Type')!r}"
+                raise ESLConnectionError(msg)
+        except BaseException:
+            # __enter__ cannot call __exit__ if connect itself fails. Release
+            # the newly opened socket even for greeting timeout/cancellation.
             self.close()
-            msg = f"unexpected ESL greeting: {greeting.get('Content-Type')!r}"
-            raise ESLConnectionError(msg)
+            raise
         log.info("ESL connected: %s:%d", host, port)
 
     def authenticate(self) -> None:
@@ -309,6 +317,21 @@ class ESLClient:
     def status(self) -> str:
         """Return the core's read-only status report."""
         return self.api("status")
+
+    def list_channels_result(self) -> ChannelSnapshot:
+        """Return a typed live-channel snapshot from this configured endpoint.
+
+        Capture time is response receipt, not a server timestamp. A complete
+        response is not a transactionally consistent call lifecycle snapshot;
+        consumers must reconcile absence with events/CDR, never infer hangup.
+        """
+        result = parse_channel_snapshot(self.api("show channels as json"))
+        return replace(
+            result,
+            source_host=self._config.host,
+            source_port=self._config.port,
+            captured_at=datetime.now(timezone.utc),
+        )
 
     def sofia_status(self, profile: str | None = None) -> str:
         """Return global or per-profile Sofia status."""
