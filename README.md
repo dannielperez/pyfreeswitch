@@ -91,6 +91,7 @@ unlocks raw `api()` strings.
 |---|---|---|
 | queue join / leave / pause | `set_callcenter_agent_status(agent, AgentStatus)` | `callcenter_config agent set status <agent> '<status>'` |
 | reconcile stuck agent | `set_callcenter_agent_state(agent, AgentState)` | `callcenter_config agent set state <agent> '<state>'` |
+| idempotent tier/agent cleanup | `delete_callcenter_tier(queue, agent)`, `delete_callcenter_agent(agent)` | canonical `name@domain` only; rejects silent short-name misses |
 | membership / reconcile (read) | `list_callcenter_agents_typed()`, `list_callcenter_tiers_typed()`, `get_callcenter_agent_status()` | `callcenter_config agent list [agent]`, `tier list`, `agent get status` |
 | hang up | `uuid_kill(uuid, cause=None)` | `uuid_kill <uuid> [cause]` |
 | blind transfer | `uuid_transfer(uuid, dest, leg=, dialplan=, context=)` | `uuid_transfer <uuid> [-bleg\|-both] <dest> [<dialplan>] [<context>]` |

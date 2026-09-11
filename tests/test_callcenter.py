@@ -292,6 +292,59 @@ def test_set_agent_state_builds_quoted_exact_command():
     assert sent == ["api callcenter_config agent set state 1900@default 'Waiting'"]
 
 
+def test_callcenter_cleanup_uses_canonical_names_and_is_idempotent():
+    client = _client(allow_mutations=True)
+    sent = []
+    client._command = lambda line: sent.append(line) or {"_body": "+OK\n"}  # noqa: SLF001
+
+    for _ in range(2):
+        tier_reply = client.delete_callcenter_tier(
+            "acceptance@default",
+            "990001@default",
+        )
+        agent_reply = client.delete_callcenter_agent("990001@default")
+
+        assert tier_reply.ok is True
+        assert agent_reply.ok is True
+
+    assert sent == [
+        "api callcenter_config tier del acceptance@default 990001@default",
+        "api callcenter_config agent del 990001@default",
+        "api callcenter_config tier del acceptance@default 990001@default",
+        "api callcenter_config agent del 990001@default",
+    ]
+
+
+def test_callcenter_cleanup_rejects_short_names_before_sending():
+    client = _client(allow_mutations=True)
+    sent = []
+    client._command = lambda line: sent.append(line) or {"_body": "+OK\n"}  # noqa: SLF001
+
+    with pytest.raises(NotSupportedError, match="unqualified callcenter queue"):
+        client.delete_callcenter_tier("acceptance", "990001@default")
+    with pytest.raises(NotSupportedError, match="unqualified callcenter agent"):
+        client.delete_callcenter_tier("acceptance@default", "990001")
+    with pytest.raises(NotSupportedError, match="unqualified callcenter agent"):
+        client.delete_callcenter_agent("990001")
+    with pytest.raises(NotSupportedError, match="unqualified callcenter agent"):
+        client.delete_callcenter_agent("990001@default@extra")
+
+    assert sent == []
+
+
+def test_callcenter_cleanup_is_gated_by_allow_mutations():
+    client = _client(allow_mutations=False)
+    sent = []
+    client._command = lambda line: sent.append(line) or {"_body": "+OK\n"}  # noqa: SLF001
+
+    with pytest.raises(NotSupportedError, match="read-only"):
+        client.delete_callcenter_tier("acceptance@default", "990001@default")
+    with pytest.raises(NotSupportedError, match="read-only"):
+        client.delete_callcenter_agent("990001@default")
+
+    assert sent == []
+
+
 def test_empty_reply_to_a_mutation_is_not_success():
     """A dropped read must never be reported as 'the switch acted'."""
     client = _client(allow_mutations=True)
