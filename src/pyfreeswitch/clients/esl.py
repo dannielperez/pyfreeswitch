@@ -104,6 +104,23 @@ def _is_agent_name(value: str) -> bool:
     return bool(_AGENT_NAME_RE.fullmatch(value or ""))
 
 
+def _is_qualified_callcenter_name(value: str) -> bool:
+    """Require the canonical ``name@domain`` stored by mod_callcenter.
+
+    FreeSWITCH accepts a short name in a delete command but does not match the
+    domain-qualified database row. Requiring the stored form prevents a
+    successful-looking cleanup from leaving an orphan behind.
+    """
+    local, separator, domain = (value or "").partition("@")
+    return bool(
+        value.count("@") == 1
+        and separator
+        and local
+        and domain
+        and _AGENT_NAME_RE.fullmatch(value)
+    )
+
+
 def _is_uuid(value: str) -> bool:
     return bool(_UUID_RE.fullmatch(value or ""))
 
@@ -471,6 +488,32 @@ class ESLClient:
         return self._mutate(
             f"callcenter_config agent set state {agent} '{state.value}'",
         )
+
+    def delete_callcenter_tier(self, queue: str, agent: str) -> CommandReply:
+        """Idempotently delete one domain-qualified queue/agent tier.
+
+        ``mod_callcenter`` returns ``+OK`` even when the row is already absent.
+        Both identifiers must use the canonical ``name@domain`` form returned
+        by the typed list methods; short names can otherwise miss the stored row
+        while still receiving a successful reply from FreeSWITCH.
+        """
+        _require(
+            _is_qualified_callcenter_name(queue),
+            f"invalid or unqualified callcenter queue name: {queue!r}",
+        )
+        _require(
+            _is_qualified_callcenter_name(agent),
+            f"invalid or unqualified callcenter agent name: {agent!r}",
+        )
+        return self._mutate(f"callcenter_config tier del {queue} {agent}")
+
+    def delete_callcenter_agent(self, agent: str) -> CommandReply:
+        """Idempotently delete one domain-qualified callcenter agent."""
+        _require(
+            _is_qualified_callcenter_name(agent),
+            f"invalid or unqualified callcenter agent name: {agent!r}",
+        )
+        return self._mutate(f"callcenter_config agent del {agent}")
 
     def uuid_kill(self, uuid: str, cause: str | None = None) -> CommandReply:
         """``uuid_kill <uuid> [cause]`` — hang up one channel by UUID."""
