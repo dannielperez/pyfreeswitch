@@ -11,7 +11,12 @@ enforces for `pytvt`, `pyakuvox`, `pyfreepbx` — CLAUDE.md §4.)
 - **Event Socket Layer (ESL) inbound client** — connect, authenticate, subscribe
   to `event plain`, and stream **typed events** (`CHANNEL_CREATE`,
   `CHANNEL_ANSWER`, `CHANNEL_BRIDGE`, `CHANNEL_HANGUP_COMPLETE`, and
-  `mod_callcenter` `callcenter::info` ACD events).
+  `mod_callcenter` `callcenter::info` ACD events). Every event carries
+  FreeSWITCH's own identity as optional typed fields: `core_uuid`
+  (`Core-UUID`), `event_sequence` (`Event-Sequence`) and
+  `event_timestamp_us` (`Event-Date-Timestamp`), `None` when missing or
+  malformed. `(core_uuid, event_sequence)` identifies one emitted event, so a
+  consumer can detect the same frame seen by two listeners.
 - **`ESLEventListener`** — a synchronous, reconnecting event stream (the shape a
   long-lived UniqueOS runner supervises), with an `ESL_IDLE` liveness tick.
 - **CDR parser** — turns the core's `cdr_csv` "unique" template rows into typed

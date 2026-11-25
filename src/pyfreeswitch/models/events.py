@@ -23,6 +23,18 @@ Correlation fields (FreeSWITCH channel model):
   event sequence by the consumer, not from the cause string.
 * Every unmodelled frame becomes :class:`UnknownEvent`, carrying the full
   ``raw`` header map (faithful passthrough, never dropped).
+
+Event identity fields (FreeSWITCH's own, set by the switch, never by us):
+
+* ``core_uuid`` (``Core-UUID``) identifies one FreeSWITCH process run; it
+  changes on every FreeSWITCH start.
+* ``event_sequence`` (``Event-Sequence``) is that process's monotonic event
+  counter; it resets when FreeSWITCH restarts, so it identifies an event only
+  together with ``core_uuid``.
+* ``event_timestamp_us`` (``Event-Date-Timestamp``) is FreeSWITCH's event
+  time in microseconds since the Unix epoch.
+* All three are ``None`` when the header is missing, empty or malformed
+  (non-integer or negative for the numeric pair) — never fabricated.
 """
 
 from __future__ import annotations
@@ -59,6 +71,12 @@ class ESLEvent(BaseModel):
     cc_member_uuid: str | None = None
     cc_member_session_uuid: str | None = None
     cc_agent_uuid: str | None = None
+    # FreeSWITCH event identity (see module docstring). Two listeners
+    # subscribed to one switch see the same (core_uuid, event_sequence) pair
+    # for the same emitted event.
+    core_uuid: str | None = None
+    event_sequence: int | None = None
+    event_timestamp_us: int | None = None
     raw: dict[str, str] = Field(default_factory=dict)
 
 

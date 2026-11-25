@@ -163,3 +163,124 @@ def test_unmodelled_event_is_unknown_but_faithful() -> None:
     assert isinstance(event, UnknownEvent)
     assert event.event_name == "RECV_RTCP_MESSAGE"
     assert event.raw == frame
+
+
+# ----------------------------------------------------------------------
+# FreeSWITCH event identity (Core-UUID / Event-Sequence / Event-Date-Timestamp)
+# ----------------------------------------------------------------------
+
+
+def test_event_identity_headers_are_promoted_on_modelled_events() -> None:
+    frame = {
+        "Event-Name": "CHANNEL_CREATE",
+        "Unique-ID": "leg-1",
+        "Core-UUID": "6f1b2c3d-0000-4000-8000-000000000001",
+        "Event-Sequence": "48213",
+        "Event-Date-Timestamp": "1764000000123456",
+    }
+
+    event = parse_event(frame, received_at=1.0)
+
+    assert isinstance(event, ChannelCreateEvent)
+    assert event.core_uuid == "6f1b2c3d-0000-4000-8000-000000000001"
+    assert event.event_sequence == 48213
+    assert event.event_timestamp_us == 1764000000123456
+
+
+def test_event_identity_headers_are_promoted_on_unknown_and_custom_events() -> None:
+    unknown = parse_event(
+        {
+            "Event-Name": "CHANNEL_CALLSTATE",
+            "Core-UUID": "core-a",
+            "Event-Sequence": "7",
+            "Event-Date-Timestamp": "1764000000000001",
+        },
+        received_at=1.0,
+    )
+    custom = parse_event(
+        {
+            "Event-Name": "CUSTOM",
+            "Event-Subclass": "callcenter::info",
+            "Core-UUID": "core-a",
+            "Event-Sequence": "8",
+        },
+        received_at=1.0,
+    )
+
+    assert isinstance(unknown, UnknownEvent)
+    assert (unknown.core_uuid, unknown.event_sequence) == ("core-a", 7)
+    assert unknown.event_timestamp_us == 1764000000000001
+    assert isinstance(custom, CallCenterEvent)
+    assert (custom.core_uuid, custom.event_sequence) == ("core-a", 8)
+    assert custom.event_timestamp_us is None
+
+
+def test_missing_event_identity_headers_stay_none() -> None:
+    event = parse_event({"Event-Name": "CHANNEL_CREATE"}, received_at=1.0)
+
+    assert event.core_uuid is None
+    assert event.event_sequence is None
+    assert event.event_timestamp_us is None
+
+
+def test_malformed_event_identity_headers_are_none_never_fabricated() -> None:
+    for bad in ("", "   ", "-1", "+5", "1.5", "1e3", "abc", "12 34", "١٢"):
+        event = parse_event(
+            {
+                "Event-Name": "CHANNEL_CREATE",
+                "Core-UUID": "core-a",
+                "Event-Sequence": bad,
+                "Event-Date-Timestamp": bad,
+            },
+            received_at=1.0,
+        )
+        assert event.event_sequence is None, bad
+        assert event.event_timestamp_us is None, bad
+        assert event.core_uuid == "core-a"
+
+
+def test_empty_core_uuid_is_none() -> None:
+    for blank in ("", "   "):
+        event = parse_event(
+            {"Event-Name": "CHANNEL_CREATE", "Core-UUID": blank, "Event-Sequence": "3"},
+            received_at=1.0,
+        )
+        assert event.core_uuid is None
+        # The sequence is still reported faithfully; pairing it with a core is
+        # the consumer's decision.
+        assert event.event_sequence == 3
+
+
+def test_zero_event_sequence_is_a_real_value() -> None:
+    event = parse_event(
+        {"Event-Name": "CHANNEL_CREATE", "Core-UUID": "c", "Event-Sequence": "0"},
+        received_at=1.0,
+    )
+
+    assert event.event_sequence == 0
+
+
+def test_event_identity_survives_url_encoded_event_headers() -> None:
+    from pyfreeswitch.clients.esl import ESLClient
+
+    text = (
+        "Event-Name: CHANNEL_CREATE\n"
+        "Core-UUID: 6f1b2c3d%2D0000%2D4000%2D8000%2D000000000001\n"
+        "Event-Sequence: %34%32\n"
+        "Event-Date-Timestamp: 1764000000123456\n"
+    )
+    frame = ESLClient._parse_headers(text, decode_values=True)
+
+    event = parse_event(frame, received_at=1.0)
+
+    assert event.core_uuid == "6f1b2c3d-0000-4000-8000-000000000001"
+    assert event.event_sequence == 42
+    assert event.event_timestamp_us == 1764000000123456
+
+
+def test_event_dto_constructors_default_identity_to_none() -> None:
+    event = ChannelCreateEvent(event_name="CHANNEL_CREATE", received_at=0.0)
+
+    assert event.core_uuid is None
+    assert event.event_sequence is None
+    assert event.event_timestamp_us is None
