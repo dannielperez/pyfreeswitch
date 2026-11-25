@@ -12,6 +12,9 @@ Normalization rules (see :mod:`pyfreeswitch.models.events`):
 * ``CUSTOM`` frames dispatch on ``Event-Subclass`` (e.g. ``callcenter::info``).
 * Frames whose event name is not modelled become :class:`UnknownEvent`,
   carrying the full ``raw`` frame (faithful passthrough, never dropped).
+* Event identity (``Core-UUID``, ``Event-Sequence``, ``Event-Date-Timestamp``)
+  is promoted on every event, modelled or not; a missing, empty or malformed
+  value (non-integer or negative for the numeric headers) becomes ``None``.
 """
 
 from __future__ import annotations
@@ -115,6 +118,17 @@ def _coerce_int(value: str | None) -> int | None:
         return None
 
 
+def _coerce_non_negative_int(value: str | None) -> int | None:
+    """Strict non-negative decimal integer, else ``None`` (never fabricated)."""
+    if value is None:
+        return None
+    value = value.strip()
+    if not value.isascii() or not value.isdigit():
+        # Rejects "", "-1", "+1", "1.5", "1e3", and non-ASCII digits.
+        return None
+    return int(value)
+
+
 def parse_event(frame: dict[str, str], received_at: float) -> ESLEvent:
     """Map one parsed ESL frame to a typed event (pure; no I/O, no state)."""
     base = {
@@ -145,6 +159,11 @@ def parse_event(frame: dict[str, str], received_at: float) -> ESLEvent:
         "cc_agent_uuid": frame.get("CC-Agent-UUID")
         or frame.get("variable_cc_agent_uuid")
         or None,
+        "core_uuid": (frame.get("Core-UUID") or "").strip() or None,
+        "event_sequence": _coerce_non_negative_int(frame.get("Event-Sequence")),
+        "event_timestamp_us": _coerce_non_negative_int(
+            frame.get("Event-Date-Timestamp"),
+        ),
         "raw": frame,
     }
 
